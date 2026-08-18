@@ -12,29 +12,30 @@
 | macOS delivery | `dist/ISO-1.0.0-macOS.zip` — pkg (3 selectable components) + MANUAL + PARAMETER-TABLE + uninstaller; payload re-opened and checked |
 | Git | local repository, commit tagged `v1.0.0`; no remote |
 
-## Prepared, NOT verified (needs a Windows compiler)
+## Windows — built and verified by CI (run 32154924811, 2026-08-18)
 
-* `packaging/INSTALL-ISO.bat` — the TRIX-shaped one-click installer: copies the prebuilt `ISO.vst3` from the delivery zip into `Common Files\VST3`, verifies, `UNINSTALL-ISO.bat` removes it.
-* `packaging/BUILD-AND-INSTALL-ISO.bat` — build-from-source-and-install for a Windows desktop with Visual Studio 2022.
-* `packaging/ISO.iss` + `.github/workflows/windows.yml` — CI: MSVC build, both
-  suites, Inno installer, install + uninstall on the runner, artefacts.
-* `packaging/make-packages.sh` (without `--mac-only`) — the two-file delivery,
-  once `packaging/fetch-windows-ci.sh` has pulled a green Windows run.
+| | |
+|---|---|
+| Compiler | Visual Studio 2022 / MSVC, x64, JUCE pinned `857aab9c` |
+| DSP suite under MSVC | 51 / 51 |
+| Host-contract suite under MSVC | 74 / 74 |
+| Installer | `ISO-1.0.0-windows.exe` (Inno Setup, 4.7 MB) — installed AND uninstalled for real on the runner, payload checked on disk |
+| Delivery | `dist/ISO-1.0.0-Windows-Setup.zip` — installer .exe, raw `ISO.vst3`, TRIX-shaped `INSTALL-ISO.bat` + `UNINSTALL-ISO.bat`, READ ME, MANUAL |
 
-## The one step that is yours
+Three CI runs failed first, all on the same host-suite check: the allocation
+counter was global to the process and charged JUCE's Windows message/timer
+threads' background allocations to the audio path (random block sizes gave it
+away). The counter is now thread-local — the audio thread is what the claim is
+about — and the plug-in itself never changed.
 
-CI needs the repository on GitHub, **public** (hosted Actions are billing-blocked
-on this account's private repos since 2026-08-06; EDGE went public and builds
-green). From `Make Music/Iso`:
+## The two files to send
 
 ```
-gh repo create iso-plugin --public --source=. --push
-git push origin v1.0.0
+dist/ISO-1.0.0-macOS.zip           12 MB   pkg (VST3 / AU / app, selectable) + READ ME + MANUAL + uninstaller
+dist/ISO-1.0.0-Windows-Setup.zip   6.8 MB  INSTALL-ISO.bat + ISO.vst3 + installer .exe + UNINSTALL + READ ME + MANUAL
 ```
 
-The `v1.0.0` tag push starts the Windows workflow; when it is green,
-`packaging/fetch-windows-ci.sh` then `packaging/make-packages.sh` produce the
-two delivery zips.
+Repository: https://github.com/gusanaaman1-boop/iso-plugin (public), tag `v1.0.0`.
 
 ## Not signed
 
