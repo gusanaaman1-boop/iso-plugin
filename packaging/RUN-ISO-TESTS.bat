@@ -7,7 +7,7 @@ REM  OPTIONAL. Installing does not depend on this - it exists so the same
 REM  numbers measured on the Mac can be measured on YOUR machine, with your
 REM  compiler and your floating-point behaviour.
 REM
-REM  Run INSTALL-ISO.bat first: this reuses that build.
+REM  Run BUILD-AND-INSTALL-ISO.bat first: this reuses that build.
 REM ---------------------------------------------------------------------------
 
 set "ROOT=%~dp0"
@@ -31,7 +31,7 @@ echo   ============================================================
 echo.
 
 if not exist "%BUILD%\CMakeCache.txt" (
-    echo   [X] No build here yet. Run INSTALL-ISO.bat first.
+    echo   [X] No build here yet. Run BUILD-AND-INSTALL-ISO.bat first.
     echo.
     pause
     exit /b 1

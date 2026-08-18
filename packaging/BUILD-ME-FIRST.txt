@@ -15,7 +15,7 @@ INSTALL - this is the whole thing
      Windows will not replace a plug-in a running host has open. This is the
      usual reason an update appears to do nothing.
 
-  3. RIGHT-CLICK  INSTALL-ISO.bat  then "Run as administrator".
+  3. RIGHT-CLICK  BUILD-AND-INSTALL-ISO.bat  then "Run as administrator".
 
   That is it. One file. It checks what you have, builds ISO, installs it and
   verifies it, printing each step and stopping at the first real problem.

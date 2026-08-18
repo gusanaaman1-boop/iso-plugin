@@ -200,6 +200,10 @@ mkdir -p "$WSTAGE"
 
 cp "$WIN_EXE" "$WSTAGE/ISO-$VERSION-windows.exe"
 cp -R "$WIN_VST3" "$WSTAGE/ISO.vst3"
+# The TRIX-shaped one-click installer and its uninstaller: copy the prebuilt
+# bundle into the VST3 folder, verify, say what broke if anything did.
+cp "$ROOT/packaging/INSTALL-ISO.bat"   "$WSTAGE/INSTALL-ISO.bat"
+cp "$ROOT/packaging/UNINSTALL-ISO.bat" "$WSTAGE/UNINSTALL-ISO.bat"
 
 # Windows' own Explorer writes these into a VST3 folder for the icon. They are
 # harmless but they are not ours, and a delivery should contain only what it
@@ -211,9 +215,20 @@ ISO $VERSION - a DJ isolator EQ
 by Gussa Naaman
 
 
-INSTALL - pick one, the first is easier
+INSTALL - pick one
 
-  1. THE INSTALLER
+  1. INSTALL-ISO.bat  (the same one-click installer TRIX uses)
+
+     Close your DAW. Extract this whole ZIP to a folder (not from inside
+     the ZIP viewer). RIGHT-CLICK INSTALL-ISO.bat, "Run as administrator".
+     It removes any old ISO, copies the new one into
+
+         C:\\Program Files\\Common Files\\VST3\\ISO.vst3
+
+     and verifies the binary is there before it says Done.
+     UNINSTALL-ISO.bat removes it again.
+
+  2. THE INSTALLER .EXE  (also installs the standalone app)
 
      Close your DAW, then double-click
 
@@ -230,7 +245,7 @@ INSTALL - pick one, the first is easier
      Not code-signed: SmartScreen may show a blue "Windows protected your
      PC" panel. Click "More info", then "Run anyway".
 
-  2. BY HAND
+  3. BY HAND
 
      Copy the ISO.vst3 FOLDER next to this file into
 
@@ -322,7 +337,7 @@ echo "  mac  ok  all three install where their format is loaded from"
 
 if [ "$MAC_ONLY" = "0" ]; then
 unzip -q "$DIST/ISO-$VERSION-Windows-Setup.zip" -d "$CHECK/win"
-for f in "ISO-$VERSION-windows.exe" "READ ME.txt" "MANUAL.md" "ISO.vst3/Contents/x86_64-win/ISO.vst3"; do
+for f in "ISO-$VERSION-windows.exe" "READ ME.txt" "MANUAL.md" "INSTALL-ISO.bat" "UNINSTALL-ISO.bat" "ISO.vst3/Contents/x86_64-win/ISO.vst3"; do
     [ -e "$CHECK/win/$f" ] || { echo "  Windows zip MISSING $f"; exit 1; }
     echo "  win  ok  $f"
 done

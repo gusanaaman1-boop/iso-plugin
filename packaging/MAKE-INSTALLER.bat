@@ -11,7 +11,7 @@ REM  The person receiving it needs nothing at all - no Visual Studio, no CMake,
 REM  no git. They double-click it and ISO is installed.
 REM
 REM  You only need this if you want to GIVE ISO to someone. To install it on
-REM  THIS machine, INSTALL-ISO.bat is the whole story.
+REM  THIS machine, BUILD-AND-INSTALL-ISO.bat is the whole story.
 REM
 REM  This script does not need administrator rights: it builds and packs, it
 REM  does not install. Refusing elevation it does not need is the honest thing
@@ -26,7 +26,7 @@ set "ROOT=%~dp0"
 if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 
 REM  This file ships at the bundle root AND in packaging\. Walk up if the source
-REM  is the parent's, so the build lands where INSTALL-ISO.bat also puts it and
+REM  is the parent's, so the build lands where BUILD-AND-INSTALL-ISO.bat also puts it and
 REM  the two share their object files instead of each paying for a full build.
 if not exist "%ROOT%\CMakeLists.txt" (
     if exist "%ROOT%\..\CMakeLists.txt" (
@@ -125,7 +125,7 @@ if exist "%JUCEDIR%\CMakeLists.txt" (
     echo         [OK] JUCE found at %JUCEDIR%
 ) else (
     echo         [X] JUCE is not at %JUCEDIR%.
-    echo             Run INSTALL-ISO.bat once first - it fetches JUCE.
+    echo             Run BUILD-AND-INSTALL-ISO.bat once first - it fetches JUCE.
     set "MISSING=1"
 )
 

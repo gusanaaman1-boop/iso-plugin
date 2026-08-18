@@ -12,7 +12,7 @@ cmake --build build -j8
 packaging/make-packages.sh --mac-only                  # dist/ISO-<ver>-macOS.zip
 ```
 
-Windows: `packaging/INSTALL-ISO.bat` on a machine with Visual Studio 2022, or the
+Windows: `packaging/BUILD-AND-INSTALL-ISO.bat` on a machine with Visual Studio 2022, or the
 GitHub Actions workflow in `.github/workflows/windows.yml` (see `docs/CI-WINDOWS.md`).
 
 * `docs/RESEARCH.md` — what Bitwig EQ-DJ, Serum, Pioneer DJM, Xone:92 and rotary isolators do, and what ISO took from each.

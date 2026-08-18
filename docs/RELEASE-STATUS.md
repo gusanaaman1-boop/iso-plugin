@@ -14,7 +14,8 @@
 
 ## Prepared, NOT verified (needs a Windows compiler)
 
-* `packaging/INSTALL-ISO.bat` — one-file build-and-install for a Windows desktop.
+* `packaging/INSTALL-ISO.bat` — the TRIX-shaped one-click installer: copies the prebuilt `ISO.vst3` from the delivery zip into `Common Files\VST3`, verifies, `UNINSTALL-ISO.bat` removes it.
+* `packaging/BUILD-AND-INSTALL-ISO.bat` — build-from-source-and-install for a Windows desktop with Visual Studio 2022.
 * `packaging/ISO.iss` + `.github/workflows/windows.yml` — CI: MSVC build, both
   suites, Inno installer, install + uninstall on the runner, artefacts.
 * `packaging/make-packages.sh` (without `--mac-only`) — the two-file delivery,

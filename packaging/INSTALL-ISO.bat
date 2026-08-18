@@ -1,345 +1,138 @@
 @echo off
 setlocal enabledelayedexpansion
-title ISO - Build and Install
+title ISO 1.0.0 - Installer
 
-REM ---------------------------------------------------------------------------
-REM  ONE file. Right-click it, "Run as administrator", and it does everything:
-REM  checks what is installed, builds ISO, installs it, verifies it.
-REM
-REM  Modelled on FOUR COLOR's installer, which is the one that actually works
-REM  on this user's machine. The four things ISO's old script got wrong and
-REM  this one does not:
-REM    1. it finds CMake INSIDE Visual Studio instead of demanding it on PATH;
-REM    2. it names the generator explicitly instead of letting CMake guess;
-REM    3. it uses the SHARED JUCE at %USERPROFILE%\JUCE - downloaded once for
-REM       every plug-in, not re-cloned per project;
-REM    4. it checks for administrator rights BEFORE a fifteen-minute build.
-REM
-REM  No text echoed by this script may contain the characters greater-than,
-REM  less-than, ampersand, pipe or caret. In an earlier installer a greater-than
-REM  inside echoed text became a redirection operator, mangled the output and
-REM  broke the if-blocks badly enough to print DONE after NOT INSTALLED.
-REM ---------------------------------------------------------------------------
+REM  Copies the prebuilt ISO.vst3 next to this file into the VST3 folder.
+REM  Same shape as TRIX's installer, which is the one that works on this
+REM  user's machine. Every failure prints where and why; nothing is hidden.
 
-set "ROOT=%~dp0"
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
-
-REM  This file ships at the bundle root AND in packaging\. Walk up if the
-REM  source is the parent's, so the build always lands in the same place.
-if not exist "%ROOT%\CMakeLists.txt" (
-    if exist "%ROOT%\..\CMakeLists.txt" (
-        pushd "%ROOT%\.."
-        set "ROOT=!CD!"
-        popd
-    )
-)
-
-set "LOG=%ROOT%\ISO-install-log.txt"
-set "DEST=C:\Program Files\Common Files\VST3"
-set "BUILD=%ROOT%\build-win"
-set "JUCEDIR=%USERPROFILE%\JUCE"
-set "JUCE_COMMIT=857aab9c4eb3084af639a380a693dcec7d728b73"
-
-echo ISO build and install log > "%LOG%"
-echo Started: %DATE% %TIME% >> "%LOG%"
-echo Folder: %ROOT% >> "%LOG%"
-
-cls
 echo.
-echo   ============================================================
-echo     ISO  -  a DJ isolator EQ
-echo     by Gussa Naaman
-echo   ============================================================
-echo.
-echo   This builds ISO from source and installs it.
-echo   The first run takes a few minutes. After that it is quick.
+echo  ============================================
+echo    ISO by Gussa Naaman  -  v1.0.0
+echo    DJ Isolator EQ
+echo  ============================================
 echo.
 
-REM --- is the source actually here? --------------------------------------------
-if not exist "%ROOT%\CMakeLists.txt" (
-    echo   [X] ISO's source is not next to this file.
-    echo.
-    echo       You are probably running this straight out of the ZIP.
-    echo       Windows copies only the script out that way.
-    echo       EXTRACT THE WHOLE ZIP to a real folder first.
-    echo NO SOURCE >> "%LOG%"
-    goto :fail
-)
-
-REM --- 0. administrator ---------------------------------------------------------
+REM --- administrator ----------------------------------------------------------
 net session >nul 2>&1
 if errorlevel 1 (
-    echo   [X] This needs administrator rights to write into Program Files.
+    echo  [X] This installer needs administrator rights.
     echo.
-    echo       Close this window, RIGHT-CLICK this file, and choose
-    echo       "Run as administrator".
-    echo NOT ADMIN >> "%LOG%"
-    goto :fail
-)
-echo   [OK] Running as administrator.
-
-REM --- 1. prerequisites ----------------------------------------------------------
-echo.
-echo   [1/6] Checking what is installed...
-
-set "MISSING="
-
-where cmake >nul 2>&1
-if errorlevel 1 (
-    REM CMake ships inside Visual Studio; try there before giving up.
-    for %%P in (
-        "%ProgramFiles%\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-        "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-        "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-        "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
-    ) do (
-        if exist "%%~P\cmake.exe" set "PATH=%%~P;!PATH!"
-    )
-)
-
-where cmake >nul 2>&1
-if errorlevel 1 (
-    echo         [X] CMake not found.
-    set "MISSING=1"
-) else (
-    echo         [OK] CMake found
-    cmake --version >> "%LOG%" 2>&1
-)
-
-REM  Visual Studio detection is ADVISORY. vswhere is not always present and its
-REM  component ids differ between installer versions, so a negative here proves
-REM  nothing - CMake is the authority, and it says so plainly a few steps down.
-set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-set "VSPATH="
-if not exist "%VSWHERE%" goto :vsdone
-for /f "usebackq tokens=*" %%I in (`"%VSWHERE%" -latest -products * -property installationPath`) do set "VSPATH=%%I"
-:vsdone
-
-if defined VSPATH (
-    echo         [OK] Visual Studio found
-    echo VS: !VSPATH! >> "%LOG%"
-) else (
-    echo         [?] Could not confirm Visual Studio. Carrying on anyway -
-    echo             the next step will say plainly if the compiler is missing.
-    echo VS NOT DETECTED >> "%LOG%"
-)
-
-REM  JUCE 9, SHARED between every plug-in in this workspace. If FOUR COLOR or
-REM  any other one was built on this machine, it is already here and nothing
-REM  is downloaded.
-if exist "%JUCEDIR%\CMakeLists.txt" (
-    echo         [OK] JUCE found at %JUCEDIR%
-) else (
-    echo         [!] JUCE not found at %JUCEDIR%
-    where git >nul 2>&1
-    if errorlevel 1 (
-        echo         [X] ...and git is not installed, so I cannot fetch it.
-        set "MISSING=1"
-    ) else (
-        echo.
-        echo         I can download JUCE 9 for you now. It is about 500 MB
-        echo         and goes to %JUCEDIR%. This happens once, for every
-        echo         plug-in you ever build.
-        echo.
-        choice /c YN /m "        Download JUCE now"
-        if errorlevel 2 (
-            echo         Skipped. Nothing was installed.
-            echo JUCE DECLINED >> "%LOG%"
-            goto :fail
-        )
-        echo.
-        echo         Downloading JUCE, please wait...
-        git clone --quiet https://github.com/juce-framework/JUCE.git "%JUCEDIR%" >> "%LOG%" 2>&1
-        if errorlevel 1 (
-            echo         [X] The download failed. Details are in the log.
-            set "MISSING=1"
-        ) else (
-            pushd "%JUCEDIR%"
-            git checkout --quiet %JUCE_COMMIT% >> "%LOG%" 2>&1
-            popd
-            echo         [OK] JUCE downloaded and set to the pinned version.
-        )
-    )
-)
-
-if defined MISSING (
+    echo      Close this window, RIGHT-CLICK INSTALL-ISO.bat
+    echo      and choose "Run as administrator".
     echo.
-    echo   ============================================================
-    echo     Something is missing. Nothing has been changed.
-    echo   ============================================================
-    echo.
-    echo     Visual Studio 2022 - free Community edition:
-    echo       https://visualstudio.microsoft.com/downloads/
-    echo       In the installer tick "Desktop development with C++".
-    echo.
-    echo     That one download also provides CMake, so install it first
-    echo     and run this file again.
-    echo.
-    echo MISSING PREREQUISITES >> "%LOG%"
-    goto :fail
+    pause
+    exit /b 1
 )
+echo  [OK] Running as administrator.
 
-REM --- 2. configure ---------------------------------------------------------------
-echo.
-echo   [2/6] Preparing the build...
-cmake -S "%ROOT%" -B "%BUILD%" -G "Visual Studio 17 2022" -A x64 -DISO_COPY_AFTER_BUILD=OFF >> "%LOG%" 2>&1
-if errorlevel 1 (
-    echo         [X] Preparation failed.
+REM --- the payload must be sitting next to this file ---------------------------
+set "SRC=%~dp0ISO.vst3"
+
+if not exist "%SRC%\" (
+    echo  [X] ISO.vst3 was not found next to this installer.
     echo.
-    echo             The usual cause is Visual Studio 2022 without the
-    echo             "Desktop development with C++" workload. Install it from
-    echo             https://visualstudio.microsoft.com/downloads/
-    echo             and run this file again.
+    echo      Looked in: %~dp0
     echo.
-    echo             The exact reason is at the end of:
-    echo             %LOG%
-    echo CONFIGURE FAILED >> "%LOG%"
-    goto :fail
-)
-echo         [OK] Ready.
-
-REM --- 3. build ---------------------------------------------------------------------
-echo.
-echo   [3/6] Building. This is the slow part - a few minutes.
-echo         Nothing is wrong if it looks stuck; it is compiling.
-cmake --build "%BUILD%" --config Release --target Iso_VST3 Iso_Standalone --parallel >> "%LOG%" 2>&1
-if errorlevel 1 (
+    echo      You are probably running this from inside the ZIP.
+    echo      EXTRACT the whole ZIP to a real folder first
+    echo      ^(right-click the ZIP, "Extract All"^), then run
+    echo      INSTALL-ISO.bat from the extracted folder.
     echo.
-    echo         [X] The build failed.
-    echo             The compiler's own message is at the end of:
-    echo             %LOG%
-    echo             Send me the last 40 lines of that file.
-    echo BUILD FAILED >> "%LOG%"
-    goto :fail
+    pause
+    exit /b 1
 )
-echo         [OK] Built.
+if not exist "%SRC%\Contents\x86_64-win\ISO.vst3" (
+    echo  [X] ISO.vst3 is here but its binary is missing:
+    echo      %SRC%\Contents\x86_64-win\ISO.vst3
+    echo      The ZIP was not extracted completely. Extract it again.
+    echo.
+    pause
+    exit /b 1
+)
+echo  [OK] Found ISO.vst3 to install.
 
-REM  Where the artefact lands depends on the generator: Visual Studio is
-REM  multi-config and inserts a Release\ level, single-config generators do
-REM  not. Look for both rather than assuming - and if neither is there, SEARCH
-REM  the build tree before giving up, so the log can say what was really made.
-set "SRC="
-if exist "%BUILD%\Iso_artefacts\Release\VST3\ISO.vst3\Contents\x86_64-win\ISO.vst3" (
-    set "SRC=%BUILD%\Iso_artefacts\Release\VST3\ISO.vst3"
-)
-if not defined SRC if exist "%BUILD%\Iso_artefacts\VST3\ISO.vst3\Contents\x86_64-win\ISO.vst3" (
-    set "SRC=%BUILD%\Iso_artefacts\VST3\ISO.vst3"
-)
-if not defined SRC (
-    for /f "delims=" %%F in ('dir /s /b /ad "%BUILD%\ISO.vst3" 2^>nul') do (
-        if not defined SRC if exist "%%F\Contents\x86_64-win\ISO.vst3" set "SRC=%%F"
-    )
-)
+set "DEST=C:\Program Files\Common Files\VST3"
+if not exist "%DEST%\" mkdir "%DEST%" 2>nul
 
-if not defined SRC (
-    echo         [X] The build reported success but no ISO.vst3 with a
-    echo             Windows binary inside it exists under:
-    echo             %BUILD%
-    echo MISSING ARTEFACT - what was actually built: >> "%LOG%"
-    dir /s /b "%BUILD%\Iso_artefacts" >> "%LOG%" 2>&1
-    goto :fail
-)
-echo         found: !SRC!
-echo ARTEFACT: !SRC! >> "%LOG%"
-
-REM --- 4. a running DAW will block the copy -----------------------------------------
-echo.
-echo   [4/6] Checking for a running DAW...
+REM --- warn about a running DAW ------------------------------------------------
 set "DAW="
-for %%P in ("Cubase.exe" "Cubase14.exe" "Cubase15.exe" "Nuendo.exe" "Ableton Live.exe" "FL64.exe" "reaper.exe" "Studio One.exe" "Bitwig Studio.exe") do (
+for %%P in ("Cubase.exe" "Nuendo.exe" "Ableton Live.exe" "FL64.exe" "FL.exe" "Studio One.exe" "reaper.exe" "Bitwig Studio.exe") do (
     tasklist /fi "imagename eq %%~P" 2>nul | find /i "%%~P" >nul && set "DAW=%%~P"
 )
 if defined DAW (
     echo.
-    echo         [!] !DAW! is running.
-    echo             Windows will not replace a plug-in a host has loaded, and
-    echo             this is the usual reason an update seems to do nothing.
+    echo  [!] %DAW% appears to be running.
+    echo      Windows will not let the plugin be replaced while a host has it
+    echo      loaded. Please close it now, then press any key to continue.
     echo.
-    echo             Close it now, then press any key.
-    echo DAW RUNNING: !DAW! >> "%LOG%"
-    pause >nul
-) else (
-    echo         [OK] Nothing in the way.
+    pause
 )
 
-REM --- 5. install ---------------------------------------------------------------------
+REM --- remove any previous install --------------------------------------------
 echo.
-echo   [5/6] Installing...
-if not exist "%DEST%\" mkdir "%DEST%" 2>nul
+echo  [1/3] Removing any previous version...
 
-REM  An old install can be a folder bundle OR a stray single file. rmdir cannot
-REM  delete a file and xcopy cannot create a folder whose name a file has taken,
-REM  and both fail quietly. Handle both, then verify the removal.
 if exist "%DEST%\ISO.vst3\" (
+    echo        found a folder bundle - deleting
     rmdir /s /q "%DEST%\ISO.vst3"
+) else if exist "%DEST%\ISO.vst3" (
+    echo        found a single file - deleting
+    del /f /q "%DEST%\ISO.vst3"
 ) else (
-    if exist "%DEST%\ISO.vst3" del /f /q "%DEST%\ISO.vst3"
+    echo        nothing to remove
 )
 
 if exist "%DEST%\ISO.vst3" (
-    echo         [X] The old version could not be removed. Something still has
-    echo             it open - a DAW, or the plug-in scanner that keeps running
-    echo             after one closes. Close every audio application and run
-    echo             this again.
-    echo REMOVE FAILED >> "%LOG%"
-    goto :fail
+    echo.
+    echo  [X] The old ISO could not be removed.
+    echo      Something still has it open - usually a DAW, or the plugin
+    echo      scanner that runs in the background after a DAW closes.
+    echo.
+    echo      Close every audio application, wait a few seconds and run
+    echo      this installer again.
+    echo.
+    pause
+    exit /b 1
 )
+echo        done.
 
-xcopy /e /i /y "!SRC!" "%DEST%\ISO.vst3\" >> "%LOG%" 2>&1
+REM --- install ------------------------------------------------------------------
+echo  [2/3] Installing ISO 1.0.0 ...
+xcopy /e /i /y "%SRC%" "%DEST%\ISO.vst3\" >nul
 if errorlevel 1 (
-    echo         [X] The copy failed. xcopy's own message is in the log.
-    echo COPY FAILED >> "%LOG%"
-    goto :fail
-)
-echo         [OK] Plug-in installed.
-
-set "EXE=%BUILD%\Iso_artefacts\Release\Standalone\ISO.exe"
-if not exist "!EXE!" set "EXE=%BUILD%\Iso_artefacts\Standalone\ISO.exe"
-if exist "!EXE!" (
-    if not exist "C:\Program Files\Naaman\ISO\" mkdir "C:\Program Files\Naaman\ISO" 2>nul
-    copy /y "!EXE!" "C:\Program Files\Naaman\ISO\ISO.exe" >nul 2>&1
-    echo         [OK] Standalone app installed.
+    echo.
+    echo  [X] Copy failed.
+    echo      Source: %SRC%
+    echo      Target: %DEST%\ISO.vst3
+    echo.
+    pause
+    exit /b 1
 )
 
-REM --- 6. verify -------------------------------------------------------------------------
-echo.
-echo   [6/6] Verifying...
+REM --- verify -------------------------------------------------------------------
+echo  [3/3] Verifying...
 if not exist "%DEST%\ISO.vst3\Contents\x86_64-win\ISO.vst3" (
-    echo         [X] The binary is not where it should be after copying.
-    echo             Wanted:
-    echo             %DEST%\ISO.vst3\Contents\x86_64-win\ISO.vst3
-    echo VERIFY FAILED - what is actually there: >> "%LOG%"
-    dir /s /b "%DEST%\ISO.vst3" >> "%LOG%" 2>&1
-    goto :fail
+    echo.
+    echo  [X] The plugin binary is not where it should be after copying.
+    echo      Expected: %DEST%\ISO.vst3\Contents\x86_64-win\ISO.vst3
+    echo.
+    pause
+    exit /b 1
 )
-echo         [OK] Verified.
+echo        verified.
 
-echo INSTALL OK >> "%LOG%"
 echo.
-echo   ============================================================
-echo     DONE. ISO is installed.
+echo  ============================================
+echo    Done. ISO 1.0.0 is installed.
 echo.
-echo     %DEST%\ISO.vst3
+echo    Installed to:
+echo    %DEST%\ISO.vst3
 echo.
-echo     1. Start Cubase
-echo     2. Studio menu, then VST Plug-in Manager, then Update
-echo     3. ISO is filed under EQ. If you do not see it, type
-echo        "ISO" in the plug-in search box.
-echo.
-echo     To check this build measures correctly on your machine,
-echo     run RUN-ISO-TESTS.bat - it is optional and takes a minute.
-echo   ============================================================
+echo    1. Start your DAW and rescan plugins
+echo       ^(Cubase: Studio, VST Plug-in Manager, Update^)
+echo    2. Find "ISO" under Naaman, category EQ
+echo    3. Put it on an AUDIO channel and hit KILL
+echo  ============================================
 echo.
 pause
-exit /b 0
-
-:fail
-echo.
-echo   ------------------------------------------------
-echo    NOT INSTALLED.
-echo    Send me this file:
-echo    %LOG%
-echo   ------------------------------------------------
-echo.
-pause
-exit /b 1
