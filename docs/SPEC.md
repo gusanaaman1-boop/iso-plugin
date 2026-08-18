@@ -1,4 +1,4 @@
-# ISO — DJ isolator EQ · specification v0.1
+# ISO — DJ isolator EQ · specification v1.0
 
 Seventh member of the plug-in family (after EDGE, FOUR COLOR, DUAL SPACE, TRIX,
 CORECOLOR, MELO TRACE). VST3 / AU / Standalone, JUCE 9, `Make Music/Iso`.
@@ -54,13 +54,27 @@ Low = ember `FF5A47`, Mid = gold `FFC247`, High = ice `47D6FF`, Filter =
 violet `A98CFF`, neutral = `DDE3F0`. A hue appears on its band's knob arc, its
 pointer, its KILL pad and its fill in the graph, and nowhere else.
 
-## Verification
+## Robustness
 
-* `build/IsoTests_artefacts/Release/IsoTests` — 50 checks, 0 failures.
-* `auval -v aufx Iso1 Naam` — PASS.
-* `IsoShot ui-shots` — six deterministic frames in `ui-shots/`.
+* Non-finite input samples are scrubbed to zero before any recursive stage
+  (identity on finite input) — one NaN from upstream cannot poison the filters.
+* Read-outs parse back to what they print: `KILL`, `+3 dB`, `2.50 kHz`, `40 %`,
+  `LP 914 Hz`, `OFF`.
+* Editor: 60–200 %, aspect locked, size saved with the state.
 
-## Not yet (v0.2 candidates)
+## Verification (1.0.0, macOS, 2026-08-18)
 
-Windows installer + CI (EDGE pattern), host-contract test suite, resizable UI,
-per-band SOLO, momentary-kill (hold) mode, MIDI-learn friendly kill toggles.
+* `IsoTests` — **51 checks, 0 failures** (Release, and again under ASan/UBSan).
+* `IsoHostTests` — **74 checks, 0 failures** (Release, and again under ASan/UBSan).
+* `auval -v aufx Iso1 Naam` — **PASS**.
+* `IsoShot ui-shots` — six deterministic frames; `IsoShot --icon` renders the bundle icon.
+* `packaging/make-packages.sh --mac-only` — `dist/ISO-1.0.0-macOS.zip` (universal
+  pkg with VST3 / AU / app components, manual, parameter table, uninstaller),
+  payload verified by re-opening it.
+
+## Not verified here
+
+The Windows build. `packaging/INSTALL-ISO.bat`, `packaging/ISO.iss` and
+`.github/workflows/windows.yml` are the EDGE pattern that went green on 2026-08-15,
+renamed; they have not yet met MSVC because this tree has no GitHub remote yet.
+See `docs/RELEASE-STATUS.md`.
