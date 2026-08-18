@@ -26,19 +26,22 @@
 
 namespace
 {
-    std::atomic<int> gAllocations { 0 };
-    std::atomic<bool> gCountAllocations { false };
-    //  Diagnostics for a failure we cannot reproduce here: the sizes of the
-    //  first few counted allocations, printed with the FAIL line.
-    std::atomic<std::size_t> gAllocSizes[8];
+    //  THREAD-LOCAL on purpose. The claim is "the audio thread does not
+    //  allocate", and this test's calling thread stands in for the audio
+    //  thread. A global counter also charged JUCE's own message / timer
+    //  threads, which on Windows allocate now and then in the background -
+    //  three CI runs failed on that, at random block sizes.
+    thread_local int gAllocations = 0;
+    thread_local bool gCountAllocations = false;
+    thread_local std::size_t gAllocSizes[8];
 }
 
 void* operator new (std::size_t n)
 {
-    if (gCountAllocations.load (std::memory_order_relaxed))
+    if (gCountAllocations)
     {
-        const int i = gAllocations.fetch_add (1, std::memory_order_relaxed);
-        if (i < 8) gAllocSizes[i].store (n, std::memory_order_relaxed);
+        const int i = gAllocations++;
+        if (i < 8) gAllocSizes[i] = n;
     }
     if (auto* p = std::malloc (n == 0 ? 1 : n))
         return p;
@@ -233,18 +236,28 @@ int main()
                 //  post a message-thread update (one allocation) - that is not
                 //  processBlock and never runs on the audio thread.
                 gAllocations = 0;
+                juce::String where;
                 for (int b = 0; b < 8; ++b)
                 {
                     fillNoise (buf, seed);
                     setParam (p, iso::id::lowGain, (float) (b % 5) - 2.0f);
+                    const int before = gAllocations;
                     gCountAllocations = true;
                     p.processBlock (buf, midi);
                     gCountAllocations = false;
+                    if (gAllocations != before) where << " blk" << b;
                     finite = finite && allFinite (buf);
                 }
                 p.releaseResources();
+                juce::String diag = juce::String (gAllocations);
+                if (gAllocations > 0)
+                {
+                    diag << " (sizes";
+                    for (int i = 0; i < juce::jmin (8, gAllocations); ++i) diag << " " << (int) gAllocSizes[i];
+                    diag << ";" << where << ")";
+                }
                 char label[80]; std::snprintf (label, sizeof label, "%.0f Hz / %d samples: finite, allocations", sr, block);
-                check (finite && gAllocations == 0, label, juce::String (gAllocations.load()));
+                check (finite && gAllocations == 0, label, diag);
             }
 
         IsoAudioProcessor p;
