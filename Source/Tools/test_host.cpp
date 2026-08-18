@@ -221,16 +221,21 @@ int main()
                 juce::uint32 seed = 7;
                 bool finite = true;
                 for (int b = 0; b < 8; ++b) { fillNoise (buf, seed); p.processBlock (buf, midi); finite = finite && allFinite (buf); }
-                //  Now count allocations on the steady-state audio path.
-                gAllocations = 0; gCountAllocations = true;
+                //  Now count allocations on the audio path only. The parameter
+                //  is set OUTSIDE the counted region: setValueNotifyingHost is
+                //  the host's call, and on Windows JUCE's listener fan-out may
+                //  post a message-thread update (one allocation) - that is not
+                //  processBlock and never runs on the audio thread.
+                gAllocations = 0;
                 for (int b = 0; b < 8; ++b)
                 {
                     fillNoise (buf, seed);
                     setParam (p, iso::id::lowGain, (float) (b % 5) - 2.0f);
+                    gCountAllocations = true;
                     p.processBlock (buf, midi);
+                    gCountAllocations = false;
                     finite = finite && allFinite (buf);
                 }
-                gCountAllocations = false;
                 p.releaseResources();
                 char label[80]; std::snprintf (label, sizeof label, "%.0f Hz / %d samples: finite, allocations", sr, block);
                 check (finite && gAllocations == 0, label, juce::String (gAllocations.load()));
