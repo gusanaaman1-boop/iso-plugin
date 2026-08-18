@@ -28,12 +28,18 @@ namespace
 {
     std::atomic<int> gAllocations { 0 };
     std::atomic<bool> gCountAllocations { false };
+    //  Diagnostics for a failure we cannot reproduce here: the sizes of the
+    //  first few counted allocations, printed with the FAIL line.
+    std::atomic<std::size_t> gAllocSizes[8];
 }
 
 void* operator new (std::size_t n)
 {
     if (gCountAllocations.load (std::memory_order_relaxed))
-        gAllocations.fetch_add (1, std::memory_order_relaxed);
+    {
+        const int i = gAllocations.fetch_add (1, std::memory_order_relaxed);
+        if (i < 8) gAllocSizes[i].store (n, std::memory_order_relaxed);
+    }
     if (auto* p = std::malloc (n == 0 ? 1 : n))
         return p;
     throw std::bad_alloc();
