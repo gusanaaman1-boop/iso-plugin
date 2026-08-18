@@ -1,0 +1,110 @@
+ISO — Windows install
+A DJ isolator EQ · by Gussa Naaman · x64
+
+------------------------------------------------------------------------------
+INSTALL - this is the whole thing
+------------------------------------------------------------------------------
+
+  1. EXTRACT this ZIP into a real folder.
+     Somewhere without spaces or Hebrew in the path is safest - C:\Audio\ISO
+     is good, the Desktop is usually fine.
+     Do not run the .bat from inside the ZIP viewer: Windows copies out only
+     the script and then it has nothing to build.
+
+  2. Close Cubase.
+     Windows will not replace a plug-in a running host has open. This is the
+     usual reason an update appears to do nothing.
+
+  3. RIGHT-CLICK  INSTALL-ISO.bat  then "Run as administrator".
+
+  That is it. One file. It checks what you have, builds ISO, installs it and
+  verifies it, printing each step and stopping at the first real problem.
+
+  It installs:
+
+    ISO.vst3  ->  C:\Program Files\Common Files\VST3
+    ISO.exe   ->  C:\Program Files\Naaman\ISO   (standalone)
+
+  4. Start Cubase, then Studio menu, then VST Plug-in Manager, then Update.
+     ISO appears under Naaman, category EQ.
+
+------------------------------------------------------------------------------
+WHAT YOU NEED, ONCE
+------------------------------------------------------------------------------
+
+  Visual Studio 2022, free Community edition, with the "Desktop development
+  with C++" workload ticked:   https://visualstudio.microsoft.com/downloads/
+
+  That one download also provides CMake, and the installer finds it inside
+  Visual Studio - you do NOT need a separate CMake on your PATH.
+
+  Git for Windows is only needed if JUCE is not already on this machine:
+  https://git-scm.com/download/win
+
+  JUCE lives at  %USERPROFILE%\JUCE  and is SHARED by every plug-in of mine.
+  If you have ever built FOUR COLOR, TRIX or any of the others here, it is
+  already there and nothing is downloaded. Otherwise the installer offers to
+  fetch it once, about 500 MB.
+
+------------------------------------------------------------------------------
+GIVING ISO TO SOMEONE ELSE
+------------------------------------------------------------------------------
+
+You only need this if you want to hand ISO to a person who has no developer
+tools and never will.
+
+    MAKE-INSTALLER.bat        (double-click, no administrator needed)
+
+It builds ISO and packs it into
+
+    dist\ISO-<version>-windows.exe
+
+which is a normal Windows installer: double-click, tick what you want, done.
+No Visual Studio, no CMake, no git, no source - none of it, on their machine.
+It also lands in Windows' Apps list, so it uninstalls like anything else.
+
+It needs Inno Setup 6 here, once. Free, no account, about 5 MB:
+
+    https://jrsoftware.org/isdl.php
+
+Do this once and keep the .exe. Everyone after that just runs it.
+
+------------------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+------------------------------------------------------------------------------
+
+The installer writes everything it does to
+
+    ISO-install-log.txt
+
+next to itself, and never claims success it did not get. If it stops, the
+window is the diagnosis - send me a screenshot of it, or that file.
+
+To start clean:  right-click UNINSTALL-ISO.bat then "Run as administrator".
+It clears every plausible location and both install shapes, and verifies that
+nothing is left behind.
+
+------------------------------------------------------------------------------
+OPTIONAL - PROVE IT ON YOUR MACHINE
+------------------------------------------------------------------------------
+
+    RUN-ISO-TESTS.bat
+
+Builds and runs the two measurement suites - 51 DSP checks and 74
+host-contract checks - so the numbers measured on the Mac are measured again
+with your compiler. It takes about a minute and installing does not depend
+on it.
+
+------------------------------------------------------------------------------
+WHAT IT IS
+------------------------------------------------------------------------------
+
+A three-band DJ isolator EQ - the club mixer's EQ section as a plug-in.
+
+  LOW / MID / HIGH    big band knobs, -30 (silence) to +12 dB, KILL under each
+  LOW/MID, MID/HIGH   the two crossover points, also draggable on the graph
+  SLOPE 12 / 24       Xone:92-style 12 dB/oct or rotary-isolator 24 dB/oct
+  CUT ISO / EQ        knob floor is silence (isolator) or -26 dB (DJM EQ curve)
+  FILTER + RES        bipolar sweep: left = low-pass, right = high-pass
+
+With every band at 0 dB it is flat to 0.000 dB and adds zero latency. See MANUAL.md for the rest.

@@ -1,0 +1,270 @@
+#  ISO — the Windows build, on a machine that has a Windows compiler.
+#
+#  What it produces, every time it runs:
+#
+#      ISO-<version>-windows.exe     a real installer, needs no tools
+#      ISO-<version>-windows-VST3    the raw bundle, for hand placement
+#
+#  and it refuses to produce either unless all 125 measurement checks pass with
+#  MSVC. That is the whole point: the Mac can prove ISO is correct with clang,
+#  and cannot prove it compiles at all with Microsoft's compiler.
+#
+#  ---------------------------------------------------------------------------
+#  RUNNING IT
+#
+#  Nothing here starts by itself. Pushing to main does not trigger it — this
+#  file only runs when you ask for it (Actions tab, "Run workflow") or when a
+#  v* tag is pushed.
+#
+#  "runner: windows-latest" uses GitHub's own machine and costs Actions
+#  minutes. "runner: self-hosted" uses YOUR Windows desktop and costs nothing
+#  on any plan — see docs/CI-WINDOWS.md for the five-minute setup.
+#  ---------------------------------------------------------------------------
+
+name: Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Where to build"
+        type: choice
+        # windows-2022, not windows-latest: "latest" now means Visual Studio
+        # 2026, and ISO's users build with VS 2022. CI should compile with the
+        # toolchain the product is actually shipped from.
+        default: windows-2022
+        options: [windows-2022, windows-latest, self-hosted]
+      release:
+        description: "Attach the installer to a GitHub release"
+        type: boolean
+        default: false
+  push:
+    tags: ["v*"]
+
+# Two runs of this on the same ref would fight over the same release asset.
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write        # only so a tagged run can attach the installer
+
+env:
+  # JUCE 9, the exact commit every ISO build on every machine uses. Pinned
+  # rather than tracked: "it built last week" has to keep meaning something.
+  JUCE_COMMIT: 857aab9c4eb3084af639a380a693dcec7d728b73
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out ISO
+        uses: actions/checkout@v4
+
+      # Into ./JUCE, which is CMakeLists' third and last fallback. Not into the
+      # home directory: on a self-hosted runner that is a real person's ~/JUCE,
+      # and a workflow has no business checking out over it.
+      - name: Check out JUCE (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: juce-framework/JUCE
+          ref: ${{ env.JUCE_COMMIT }}
+          path: JUCE
+          fetch-depth: 1
+
+      - name: Read the version from CMakeLists
+        id: ver
+        shell: pwsh
+        run: |
+          $line = Select-String -Path CMakeLists.txt -Pattern '^project\(Iso VERSION ([0-9.]+)' |
+                  Select-Object -First 1
+          if (-not $line) { throw "Could not read the version out of CMakeLists.txt" }
+          $v = $line.Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "ISO $v"
+
+      # Name the generator rather than let CMake guess - but only when the named
+      # one is actually installed. The first run of this workflow died here:
+      # windows-latest now ships Visual Studio 2026, so "Visual Studio 17 2022"
+      # could not be found and CMake said so in four words.
+      - name: Configure
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $gen = ""
+          if (Test-Path $vswhere) {
+            $vs2022 = & $vswhere -products * -version "[17.0,18.0)" -property installationPath
+            if ($vs2022) { $gen = "Visual Studio 17 2022" }
+          }
+          if ($gen) {
+            Write-Host "generator: $gen  (the same one INSTALL-ISO.bat uses)"
+            cmake -S . -B build -G $gen -A x64 -DISO_COPY_AFTER_BUILD=OFF
+          } else {
+            Write-Host "Visual Studio 2022 is not on this runner - using CMake's default generator."
+            cmake -S . -B build -A x64 -DISO_COPY_AFTER_BUILD=OFF
+          }
+          if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+
+      - name: Build the plug-in and both test suites
+        shell: pwsh
+        run: |
+          cmake --build build --config Release `
+                --target Iso_VST3 Iso_Standalone IsoTests IsoHostTests `
+                --parallel
+
+      # Built is not the same as present. A build that dies half way leaves an
+      # empty ISO.vst3 folder, and an empty bundle installs perfectly and then
+      # fails to scan — so check the payload inside it, not the folder.
+      - name: Check the artefacts exist
+        shell: pwsh
+        run: |
+          $need = @(
+            "build\Iso_artefacts\Release\VST3\ISO.vst3\Contents\x86_64-win\ISO.vst3",
+            "build\Iso_artefacts\Release\Standalone\ISO.exe"
+          )
+          $missing = @($need | Where-Object { -not (Test-Path $_) })
+          if ($missing.Count -gt 0) {
+            Get-ChildItem -Recurse build\Iso_artefacts | Select-Object -First 60 FullName
+            $missing | ForEach-Object { Write-Host "  MISSING  $_" }
+            throw "the build reported success but $($missing.Count) artefact(s) are not there"
+          }
+          $need | ForEach-Object { Write-Host "  ok  $_" }
+
+      - name: 51 DSP checks
+        shell: pwsh
+        run: .\build\IsoTests_artefacts\Release\IsoTests.exe
+
+      # This one opens real editors. If it ever fails on a hosted runner while
+      # passing on a desktop, suspect the session before suspecting the code.
+      - name: 74 host-contract checks
+        shell: pwsh
+        run: .\build\IsoHostTests_artefacts\Release\IsoHostTests.exe
+
+      - name: Find or install Inno Setup 6
+        id: inno
+        shell: pwsh
+        run: |
+          $paths = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            Write-Host "Inno Setup not found; installing it."
+            choco install innosetup --no-progress -y
+            $iscc = $paths | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "Inno Setup 6 is still not available." }
+          Write-Host "  using $iscc"
+          "iscc=$iscc" >> $env:GITHUB_OUTPUT
+
+      - name: Pack the installer
+        shell: pwsh
+        run: |
+          $src  = "$pwd\build\Iso_artefacts\Release"
+          $icon = "$pwd\build\Iso_artefacts\JuceLibraryCode\icon.ico"
+          $args = @("/Q", "/DAppVersion=${{ steps.ver.outputs.version }}", "/DSrcRoot=$src")
+          # Only pass the icon once it exists — Inno refuses to compile against
+          # a SetupIconFile that is not there.
+          if (Test-Path $icon) { $args += "/DIsoIcon=$icon" }
+          $args += "packaging\ISO.iss"
+          & "${{ steps.inno.outputs.iscc }}" @args
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup refused (exit $LASTEXITCODE)" }
+
+      # An installer that packed nothing is still a valid .exe — about a
+      # megabyte of wizard and no payload. It installs, says it worked, and
+      # leaves the plug-in folder empty.
+      - name: Check the installer is not empty
+        shell: pwsh
+        run: |
+          $exe = "dist\ISO-${{ steps.ver.outputs.version }}-windows.exe"
+          if (-not (Test-Path $exe)) { throw "no installer at $exe" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          if ((Get-Item $exe).Length -lt 2MB) { throw "the installer is only $mb MB — it is empty" }
+          Write-Host "  ok  $exe  ($mb MB)"
+
+      # An installer that was built is not an installer that works. This runs
+      # it for real, on real Windows, in the mode a person's double-click would
+      # produce - and then checks what actually landed on disk rather than
+      # trusting the exit code, because Inno returns 0 for plenty of installs
+      # that put nothing anywhere.
+      - name: Install it, for real
+        shell: pwsh
+        run: |
+          $exe = "dist\ISO-${{ steps.ver.outputs.version }}-windows.exe"
+          Start-Process -FilePath $exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          Write-Host "installer exit code: $LASTEXITCODE"
+
+          $vst3 = "${env:CommonProgramFiles}\VST3\ISO.vst3\Contents\x86_64-win\ISO.vst3"
+          $app  = "${env:ProgramFiles}\Naaman\ISO\ISO.exe"
+          $man  = "${env:ProgramFiles}\Naaman\ISO\MANUAL.md"
+
+          $bad = @()
+          foreach ($f in @($vst3, $app, $man)) {
+            if (Test-Path $f) {
+              Write-Host ("  ok       {0}  ({1:N0} bytes)" -f $f, (Get-Item $f).Length)
+            } else {
+              Write-Host "  MISSING  $f"
+              $bad += $f
+            }
+          }
+          if ($bad.Count -gt 0) { throw "the installer ran and did not install $($bad.Count) of its files" }
+
+          # A VST3 that is present but truncated scans and then fails to load.
+          if ((Get-Item $vst3).Length -lt 1MB) { throw "the installed VST3 is too small to be real" }
+
+      # It has to come off as cleanly as it went on. An uninstaller that leaves
+      # a half-deleted bundle behind gives Cubase something that crashes on the
+      # next scan, and nobody connects that to an uninstall done weeks earlier.
+      - name: Uninstall it, and check nothing is left
+        shell: pwsh
+        run: |
+          $unins = Get-ChildItem "${env:ProgramFiles}\Naaman\ISO" -Filter "unins*.exe" |
+                   Select-Object -First 1
+          if (-not $unins) { throw "the install left no uninstaller" }
+
+          Start-Process -FilePath $unins.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          Start-Sleep -Seconds 5   # Inno's uninstaller detaches a helper to delete itself
+
+          $left = @()
+          foreach ($f in @("${env:CommonProgramFiles}\VST3\ISO.vst3",
+                           "${env:ProgramFiles}\Naaman\ISO\ISO.exe")) {
+            if (Test-Path $f) { $left += $f }
+          }
+          if ($left.Count -gt 0) {
+            $left | ForEach-Object { Write-Host "  LEFT BEHIND  $_" }
+            throw "the uninstaller left $($left.Count) item(s) on disk"
+          }
+          Write-Host "  ok  installed and removed cleanly"
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ISO-${{ steps.ver.outputs.version }}-windows-installer
+          path: dist/ISO-${{ steps.ver.outputs.version }}-windows.exe
+          if-no-files-found: error
+
+      # The raw bundle too, for anyone who would rather drop it in by hand than
+      # run an unsigned installer.
+      - name: Upload the raw VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: ISO-${{ steps.ver.outputs.version }}-windows-VST3
+          path: build/Iso_artefacts/Release/VST3/ISO.vst3/**
+          if-no-files-found: error
+
+      # gh is preinstalled on every runner, so this needs no third-party action.
+      - name: Attach it to the release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $exe = "dist\ISO-${{ steps.ver.outputs.version }}-windows.exe"
+          if (-not (gh release view $tag 2>$null)) {
+            gh release create $tag --title "ISO $tag" --notes "Windows installer, built and tested by CI."
+          }
+          gh release upload $tag $exe --clobber
