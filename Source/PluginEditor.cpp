@@ -223,6 +223,17 @@ void IsoPanel::paint (juce::Graphics& g)
     paintPanel (g, header.toFloat().reduced (metric::margin * 0.5f, 6.0f), colour::headerTop, colour::headerBottom, metric::radius);
     drawWordmark (g, juce::Rectangle<float> ((float) metric::margin + 8.0f, 13.0f, 260.0f, 26.0f));
 
+    //  The maker's mark, after the product: a hairline, the N, "NAAMAN".
+    {
+        const float x0 = (float) metric::margin + 8.0f + 26.0f + 12.0f + 62.0f + 96.0f;
+        g.setColour (colour::steelDark);
+        g.fillRect (juce::Rectangle<float> (x0, 14.0f, 1.0f, 24.0f));
+        drawNaamanMark (g, juce::Rectangle<float> (x0 + 12.0f, 11.0f, 30.0f, 30.0f));
+        g.setColour (colour::textDim);
+        g.setFont (juce::Font (juce::FontOptions (font::caption, juce::Font::bold)).withExtraKerningFactor (0.22f));
+        g.drawText ("NAAMAN", juce::Rectangle<float> (x0 + 46.0f, 13.0f, 70.0f, 26.0f), juce::Justification::centredLeft);
+    }
+
     paintPanel (g, deck.toFloat(), colour::deckTop, colour::deckBottom, metric::radius);
     g.setColour (colour::steelDark);
     g.fillRect (divider);

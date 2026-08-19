@@ -82,6 +82,10 @@ namespace iso::ui
     //  short - a three-band isolator with the mid killed. Fills `bounds`.
     void drawLogoMark (juce::Graphics&, juce::Rectangle<float> bounds);
     void drawWordmark (juce::Graphics&, juce::Rectangle<float> area);
+    //  The maker's mark - Naaman's N in a circle, bone strokes and one brass
+    //  diagonal - the same geometry FOUR COLOR and the website draw (a 40x40
+    //  box: verticals at x 13.2 / 26.8 from y 12.6 to 27.4, circle r 18.25).
+    void drawNaamanMark (juce::Graphics&, juce::Rectangle<float> bounds);
 
     //  One knob renderer. Per-control variation travels in the Slider's
     //  property set:

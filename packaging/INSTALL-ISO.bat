@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title ISO 1.0.0 - Installer
+title ISO 1.0.1 - Installer
 
 REM  Copies the prebuilt ISO.vst3 next to this file into the VST3 folder.
 REM  Same shape as TRIX's installer, which is the one that works on this
@@ -8,7 +8,7 @@ REM  user's machine. Every failure prints where and why; nothing is hidden.
 
 echo.
 echo  ============================================
-echo    ISO by Gussa Naaman  -  v1.0.0
+echo    ISO by Gussa Naaman  -  v1.0.1
 echo    DJ Isolator EQ
 echo  ============================================
 echo.
@@ -98,7 +98,7 @@ if exist "%DEST%\ISO.vst3" (
 echo        done.
 
 REM --- install ------------------------------------------------------------------
-echo  [2/3] Installing ISO 1.0.0 ...
+echo  [2/3] Installing ISO 1.0.1 ...
 xcopy /e /i /y "%SRC%" "%DEST%\ISO.vst3\" >nul
 if errorlevel 1 (
     echo.
@@ -124,7 +124,7 @@ echo        verified.
 
 echo.
 echo  ============================================
-echo    Done. ISO 1.0.0 is installed.
+echo    Done. ISO 1.0.1 is installed.
 echo.
 echo    Installed to:
 echo    %DEST%\ISO.vst3
